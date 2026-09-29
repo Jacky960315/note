@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>創意便利貼</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Phosphor Icons (漂亮的外框圖示) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            margin: 0;
+            overflow: hidden; /* 防止整個頁面滾動，僅內容區滾動 */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* 網格背景設計 (改成黑色筆記本方格紙風格) */
+        .bg-grid {
+            background-color: #121212;
+            background-image: linear-gradient(to right, #2a2a2a 1px, transparent 1px),
+                              linear-gradient(to bottom, #2a2a2a 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* 便簽樣式與動畫 */
+        .sticky-note {
+            width: 280px;
+            min-height: 240px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: box-shadow 0.2s, transform 0.1s;
+            display: flex;
+            flex-direction: column;
+            position: absolute; /* 預設為畫布模式 */
+        }
+
+        /* 網格模式下的強制覆蓋 */
+        .layout-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            padding: 2rem;
+            align-items: start;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        .layout-grid .sticky-note {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            transform: none !important;
+            z-index: 1 !important;
+            margin: 0 auto;
+        }
+
+        /* 拖曳狀態 */
+        .is-dragging {
+            opacity: 0.9;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            cursor: grabbing !important;
+        }
+
+        .drag-handle {
+            cursor: grab;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        /* 隱藏原生輸入框樣式 */
+        .content-input {
+            resize: none;
+            outline: none;
+            background: transparent;
+            width: 100%;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        /* 紙膠帶樣式 (新增) */
+        .washi-tape {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 25px;
+            background-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            backdrop-filter: blur(2px);
+            z-index: 10;
+        }
+        /* 讓紙膠帶兩端有撕裂感 (簡單用clip-path模擬) */
+        .washi-tape-edge {
+            clip-path: polygon(0% 5%, 5% 0%, 10% 8%, 15% 0%, 20% 5%, 25% 0%, 30% 8%, 35% 0%, 40% 5%, 45% 0%, 50% 8%, 55% 0%, 60% 5%, 65% 0%, 70% 8%, 75% 0%, 80% 5%, 85% 0%, 90% 8%, 95% 0%, 100% 5%, 100% 95%, 95% 100%, 90% 92%, 85% 100%, 80% 95%, 75% 100%, 70% 92%, 65% 100%, 60% 95%, 55% 100%, 50% 92%, 45% 100%, 40% 95%, 35% 100%, 30% 92%, 25% 100%, 20% 95%, 15% 100%, 10% 92%, 5% 100%, 0% 95%);
+        }
+
+        /* 顏色主題變數 */
+        .theme-yellow { background-color: #fef08a; border: 1px solid #fde047; }
+        .theme-green { background-color: #dcfce7; border: 1px solid #bbf7d0; }
+        .theme-pink { background-color: #fce7f3; border: 1px solid #fbcfe8; }
+        .theme-blue { background-color: #dbeafe; border: 1px solid #bfdbfe; }
+        .theme-purple { background-color: #f3e8ff; border: 1px solid #e9d5ff; }
+
+        .btn-color {
+            width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: transform 0.1s;
+        }
+        .btn-color:hover { transform: scale(1.2); }
+        .btn-color.active { border-color: rgba(0,0,0,0.4); transform: scale(1.1); }
+    </style>
+</head>
+<body class="bg-grid text-gray-200">
+
+    <header class="bg-[#1a1a1a] border-b border-gray-800 px-6 py-3 flex items-center justify-between z-50 shrink-0 shadow-sm relative">
+        <!-- 左側：Logo與標題 -->
+        <div class="flex items-center gap-4">
+            <div class="bg-yellow-500 text-white p-2 rounded-lg shadow-sm">
+                <i class="ph ph-push-pin text-xl"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-bold text-lg text-gray-100">創意便利貼</h1>
+                    <span id="note-count-badge" class="bg-yellow-900/50 text-yellow-400 border border-yellow-700/50 text-xs font-semibold px-2.5 py-0.5 rounded-full">0 張</span>
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5">點擊新增、自由拖曳排版、自動儲存</p>
+            </div>
+        </div>
+
+        <!-- 中間：搜尋與篩選 -->
+        <div class="flex items-center gap-6">
+            <!-- 搜尋框 -->
+            <div class="relative">
+                <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="search-input" placeholder="搜尋便簽內容或標題..." 
+                    class="bg-gray-800 border border-gray-700 rounded-full pl-9 pr-4 py-2 text-sm w-64 focus:ring-2 focus:ring-yellow-500 focus:bg-gray-700 text-gray-200 transition-all outline-none placeholder-gray-500">
+            </div>
+
+            <!-- 顏色篩選器 -->
+            <div class="flex items-center bg-gray-800 rounded-full p-1 gap-1 border border-gray-700">
+                <button class="filter-btn text-xs font-medium px-3 py-1 rounded-full bg-gray-600 text-white shadow-sm" data-color="all">全部</button>
+                <div class="flex gap-1.5 px-2">
+                    <button class="filter-color w-5 h-5 rounded-full bg-[#fef08a] border-2 border-transparent hover:scale-110 transition-transform" data-color="yellow" title="黃色"></button>
+                    <button class="filter-color w-5 h-5 rounded-full bg-[#dcfce7] border-2 border-transparent hover:scale-110 transition-transform" data-color="green" title="綠色"></button>
+                    <button class="filter-color w-5 h-5 rounded-full bg-[#fce7f3] border-2 border-transparent hover:scale-110 transition-transform" data-color="pink" title="粉色"></button>
+                    <button class="filter-color w-5 h-5 rounded-full bg-[#dbeafe] border-2 border-transparent hover:scale-110 transition-transform" data-color="blue" title="藍色"></button>
+                    <button class="filter-color w-5 h-5 rounded-full bg-[#f3e8ff] border-2 border-transparent hover:scale-110 transition-transform" data-color="purple" title="紫色"></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：視圖切換與新增按鈕 -->
+        <div class="flex items-center gap-3">
+            <button id="btn-export" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800 text-sm font-medium transition-all" title="備份資料">
+                <i class="ph ph-download-simple"></i> 匯出備份
+            </button>
+            <div class="flex bg-gray-800 p-1 rounded-lg border border-gray-700">
+                <button id="view-canvas" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-600 text-white shadow-sm text-sm font-medium transition-all">
+                    <i class="ph ph-arrows-out-cardinal"></i> 畫布
+                </button>
+                <button id="view-grid" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-gray-400 hover:text-gray-200 text-sm font-medium transition-all">
+                    <i class="ph ph-squares-four"></i> 網格
+                </button>
+            </div>
+            <button id="btn-add-note" class="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors">
+                <i class="ph ph-plus-circle text-lg"></i> 新增便簽
+            </button>
+        </div>
+    </header>
+
+    <!-- 主要看板區 -->
+    <main id="board-area" class="flex-grow relative w-full h-full overflow-hidden" 
+          ondblclick="handleBoardDoubleClick(event)">
+        <!-- 便簽將由 JS 動態生成並放入這裡 -->
+    </main>
+
+    <script>
+        // --- 狀態管理 ---
+        const STORAGE_KEY = 'sticky_notes_data';
+        let notes = [];
+        let viewMode = 'canvas'; // 'canvas' 或 'grid'
+        let currentFilterColor = 'all';
+        let searchQuery = '';
+        let highestZ = 10; // 用於管理便簽層級，點擊時移到最上層
+
+        // DOM 元素參考
+        const boardArea = document.getElementById('board-area');
+        const btnAddNote = document.getElementById('btn-add-note');
+        const btnExport = document.getElementById('btn-export');
+        const badgeCount = document.getElementById('note-count-badge');
+        const viewCanvasBtn = document.getElementById('view-canvas');
+        const viewGridBtn = document.getElementById('view-grid');
+        const searchInput = document.getElementById('search-input');
+        const filterBtns = document.querySelectorAll('.filter-color');
+        const filterAllBtn = document.querySelector('.filter-btn[data-color="all"]');
+
+        // 顏色對應設定
+        const colors = {
+            'yellow': '#fef08a',
+            'green': '#dcfce7',
+            'pink': '#fce7f3',
+            'blue': '#dbeafe',
+            'purple': '#f3e8ff'
+        };
+
+        // --- 初始化與載入資料 ---
+        function init() {
+            loadNotes();
+            setupEventListeners();
+            renderNotes();
+        }
+
+        function loadNotes() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    notes = JSON.parse(saved);
+                    // 找出最高的 z-index 以免新增時被覆蓋
+                    notes.forEach(n => {
+                        if (n.z > highestZ) highestZ = n.z;
+                    });
+                } catch (e) {
+                    console.error("載入失敗", e);
+                    createWelcomeNote();
+                }
+            } else {
+                createWelcomeNote();
+            }
+        }
+
+        function saveNotes() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+            updateBadge();
+        }
+
+        function createWelcomeNote() {
+            notes = [
+                {
+                    id: Date.now().toString(),
+                    title: '👋 歡迎使用創意便利貼',
+                    content: '這是一個支援自由拖曳與自動儲存的靈感看板。\n\n• 按上方「新增便簽」或雙擊看板任一處加入便簽。\n• 拖曳便簽頂部即可自由擺放位置。\n• 資料會自動保存在您的瀏覽器中！',
+                    color: 'yellow',
+                    x: 100,
+                    y: 100,
+                    z: highestZ++,
+                    r: -2, // 新增：微微旋轉角度
+                    isPinned: true,
+                    timestamp: new Date().getTime()
+                },
+                {
+                    id: (Date.now() + 1).toString(),
+                    title: '💡 今日待辦事項',
+                    content: '1. 完成設計稿審查\n2. 準備下午 3 點會議簡報\n3. 採買咖啡豆與日常雜物',
+                    color: 'green',
+                    x: 420,
+                    y: 150,
+                    z: highestZ++,
+                    r: 1, // 新增：微微旋轉角度
+                    isPinned: false,
+                    timestamp: new Date().getTime()
+                },
+                {
+                    id: (Date.now() + 2).toString(),
+                    title: '🎨 創意專區',
+                    content: '「創造力就是把各種事物連結起來。」\n\n試著點擊便簽上的喇叭圖示，聽聽看語音朗讀功能！',
+                    color: 'pink',
+                    x: 740,
+                    y: 200,
+                    z: highestZ++,
+                    r: -1.5, // 新增：微微旋轉角度
+                    isPinned: false,
+                    timestamp: new Date().getTime()
+                }
+            ];
+            saveNotes();
+        }
+
+        // --- 核心渲染邏輯 ---
+        function renderNotes() {
+            boardArea.innerHTML = '';
+            
+            // 根據搜尋和顏色篩選
+            let filteredNotes = notes.filter(note => {
+                const matchColor = currentFilterColor === 'all' || note.color === currentFilterColor;
+                const matchSearch = note.title.toLowerCase().includes(searchQuery) || 
+                                    note.content.toLowerCase().includes(searchQuery);
+                return matchColor && matchSearch;
+            });
+
+            filteredNotes.forEach(note => {
+                const noteEl = document.createElement('div');
+                noteEl.className = `sticky-note theme-${note.color} rounded-xl p-4`;
+                noteEl.dataset.id = note.id;
+                
+                // 設定位置與層級 
+                noteEl.style.left = `${note.x}px`;
+                noteEl.style.top = `${note.y}px`;
+                noteEl.style.zIndex = note.z;
+                
+                // 新增：僅在畫布模式且有旋轉值時套用傾斜
+                if (viewMode === 'canvas' && note.r) {
+                    noteEl.style.transform = `rotate(${note.r}deg)`;
+                } else {
+                    noteEl.style.transform = 'none';
+                }
+
+                // 格式化時間
+                const date = new Date(note.timestamp);
+                const timeString = `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+
+                noteEl.innerHTML = `
+                    <!-- 裝飾用紙膠帶 (針對深色背景優化) -->
+                    <div class="washi-tape washi-tape-edge opacity-80" style="background-color: ${colors[note.color]}; filter: brightness(0.9);"></div>
+                    
+                    <!-- 頂部拖曳區與工具列 -->
+                    <div class="drag-handle flex items-center justify-between mb-3 group select-none relative z-20">
+                        <div class="flex items-center gap-2 flex-grow overflow-hidden pr-2">
+                            <i class="ph-fill ph-push-pin text-lg ${note.isPinned ? 'text-red-500' : 'text-gray-400 opacity-50 group-hover:opacity-100'} cursor-pointer pin-btn transition-colors"></i>
+                            <input type="text" class="font-bold text-gray-800 bg-transparent outline-none w-full placeholder-gray-400 title-input cursor-text" placeholder="無標題" value="${escapeHtml(note.title)}">
+                        </div>
+                        <div class="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button class="speak-btn text-gray-500 hover:text-blue-600 p-1 rounded hover:bg-blue-50" title="朗讀內容"><i class="ph ph-speaker-high"></i></button>
+                            <button class="copy-btn text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-black/5" title="複製便簽"><i class="ph ph-copy"></i></button>
+                            <button class="delete-btn text-gray-500 hover:text-red-600 p-1 rounded hover:bg-red-50" title="刪除"><i class="ph ph-trash"></i></button>
+                        </div>
+                    </div>
+                    
+                    <!-- 內容區 -->
+                    <textarea class="content-input text-gray-700 text-sm leading-relaxed placeholder-gray-400 relative z-20" placeholder="寫下你的靈感...">${escapeHtml(note.content)}</textarea>
+                    
+                    <!-- 底部顏色與時間 -->
+                    <div class="flex items-center justify-between mt-3 pt-3 border-t border-black/5 shrink-0">
+                        <div class="flex gap-1.5">
+                            ${Object.keys(colors).map(c => 
+                                `<div class="btn-color bg-[${colors[c]}] ${note.color === c ? 'active border-gray-400' : ''}" style="background-color: ${colors[c]}" data-c="${c}"></div>`
+                            ).join('')}
+                        </div>
+                        <span class="text-[10px] text-gray-400 font-medium">${timeString}</span>
+                    </div>
+                `;
+
+                boardArea.appendChild(noteEl);
+
+                // 綁定單個便簽的事件
+                attachNoteEvents(noteEl, note);
+            });
+
+            updateBadge();
+        }
+
+        function escapeHtml(unsafe) {
+            return (unsafe || '')
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function updateBadge() {
+            badgeCount.textContent = `${notes.length} 張`;
+        }
+
+        // --- 便簽互動事件 (拖曳、編輯、刪除等) ---
+        function attachNoteEvents(noteEl, note) {
+            const dragHandle = noteEl.querySelector('.drag-handle');
+            const titleInput = noteEl.querySelector('.title-input');
+            const contentInput = noteEl.querySelector('.content-input');
+            const deleteBtn = noteEl.querySelector('.delete-btn');
+            const copyBtn = noteEl.querySelector('.copy-btn');
+            const speakBtn = noteEl.querySelector('.speak-btn');
+            const pinBtn = noteEl.querySelector('.pin-btn');
+            const colorBtns = noteEl.querySelectorAll('.btn-color');
+
+            // 1. 拖曳邏輯
+            let isDragging = false;
+            let startX, startY, initialLeft, initialTop;
+
+            dragHandle.addEventListener('mousedown', (e) => {
+                // 如果點擊的是按鈕或輸入框，不要觸發拖曳
+                if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.pin-btn')) return;
+                
+                if (viewMode === 'grid') return; // 網格模式禁止拖曳
+
+                isDragging = true;
+                bringToFront(noteEl, note);
+                noteEl.classList.add('is-dragging');
+
+                // 拖曳時把旋轉拉直，手感更俐落 (新增)
+                noteEl.style.transform = 'rotate(0deg)';
+
+                startX = e.clientX;
+                startY = e.clientY;
+                initialLeft = parseInt(noteEl.style.left) || 0;
+                initialTop = parseInt(noteEl.style.top) || 0;
+
+                e.preventDefault(); // 防止選取文字
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                
+                let newX = initialLeft + dx;
+                let newY = initialTop + dy;
+
+                // 邊界限制
+                newX = Math.max(0, newX);
+                newY = Math.max(0, newY);
+
+                noteEl.style.left = `${newX}px`;
+                noteEl.style.top = `${newY}px`;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    noteEl.classList.remove('is-dragging');
+                    
+                    // 放開後恢復原本的隨機旋轉角度 (新增)
+                    if (viewMode === 'canvas' && note.r) {
+                        noteEl.style.transform = `rotate(${note.r}deg)`;
+                    }
+
+                    // 儲存新位置
+                    note.x = parseInt(noteEl.style.left);
+                    note.y = parseInt(noteEl.style.top);
+                    saveNotes();
+                }
+            });
+
+            // 點擊任何地方都移到最上層
+            noteEl.addEventListener('mousedown', () => bringToFront(noteEl, note));
+
+            // 2. 編輯與自動儲存
+            titleInput.addEventListener('input', (e) => {
+                note.title = e.target.value;
+                saveNotes();
+            });
+
+            contentInput.addEventListener('input', (e) => {
+                note.content = e.target.value;
+                saveNotes();
+            });
+
+            // 3. 工具列動作
+            deleteBtn.addEventListener('click', () => {
+                noteEl.style.transform = 'scale(0.8)';
+                noteEl.style.opacity = '0';
+                setTimeout(() => {
+                    notes = notes.filter(n => n.id !== note.id);
+                    saveNotes();
+                    renderNotes();
+                }, 200);
+            });
+
+            copyBtn.addEventListener('click', () => {
+                const newNote = { ...note, id: Date.now().toString(), x: note.x + 20, y: note.y + 20, z: ++highestZ, timestamp: Date.now(), r: (Math.random() * 6 - 3).toFixed(1) };
+                notes.push(newNote);
+                saveNotes();
+                renderNotes();
+            });
+
+            // 新增朗讀功能
+            speakBtn.addEventListener('click', () => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel(); // 停止先前的朗讀
+                    const text = (note.title ? note.title + '。' : '') + note.content;
+                    if (!text.trim()) return;
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'zh-TW';
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    alert('您的瀏覽器不支援語音朗讀功能 (可嘗試使用 Chrome 或 Edge)');
+                }
+            });
+
+            pinBtn.addEventListener('click', () => {
+                note.isPinned = !note.isPinned;
+                saveNotes();
+                // 簡單切換樣式，不重新 render 整個畫面以求順暢
+                if(note.isPinned) {
+                    pinBtn.classList.remove('text-gray-400', 'opacity-50');
+                    pinBtn.classList.add('text-red-500');
+                } else {
+                    pinBtn.classList.add('text-gray-400', 'opacity-50');
+                    pinBtn.classList.remove('text-red-500');
+                }
+            });
+
+            // 4. 更改顏色
+            colorBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const newColor = e.target.dataset.c;
+                    note.color = newColor;
+                    saveNotes();
+                    renderNotes(); // 顏色改變涉及 class 替換，重新 render 較乾淨
+                });
+            });
+        }
+
+        function bringToFront(noteEl, note) {
+            if (note.z !== highestZ) {
+                highestZ++;
+                note.z = highestZ;
+                noteEl.style.zIndex = highestZ;
+                saveNotes();
+            }
+        }
+
+        // --- 全域事件監聽 (新增、搜尋、視圖切換) ---
+        function setupEventListeners() {
+            // 新增便簽 (按鈕)
+            btnAddNote.addEventListener('click', () => addNewNote());
+
+            // 匯出備份功能 (新增)
+            if(btnExport) btnExport.addEventListener('click', exportNotes);
+
+            // 視圖切換
+            viewCanvasBtn.addEventListener('click', () => setViewMode('canvas'));
+            viewGridBtn.addEventListener('click', () => setViewMode('grid'));
+
+            // 搜尋
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase();
+                renderNotes();
+            });
+
+            // 顏色篩選
+            filterAllBtn.addEventListener('click', () => setFilter('all'));
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => setFilter(e.target.dataset.color));
+            });
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            if (mode === 'grid') {
+                boardArea.classList.add('layout-grid');
+                boardArea.classList.remove('overflow-hidden');
+                
+                // 更新按鈕樣式
+                viewGridBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-600 text-white shadow-sm text-sm font-medium transition-all';
+                viewCanvasBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-gray-400 hover:text-gray-200 text-sm font-medium transition-all';
+            } else {
+                boardArea.classList.remove('layout-grid');
+                boardArea.classList.add('overflow-hidden');
+                
+                // 更新按鈕樣式
+                viewCanvasBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-600 text-white shadow-sm text-sm font-medium transition-all';
+                viewGridBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-gray-400 hover:text-gray-200 text-sm font-medium transition-all';
+            }
+        }
+
+        function setFilter(color) {
+            currentFilterColor = color;
+            
+            // 更新篩選器 UI
+            filterAllBtn.className = color === 'all' 
+                ? 'filter-btn text-xs font-medium px-3 py-1 rounded-full bg-gray-600 text-white shadow-sm' 
+                : 'filter-btn text-xs font-medium px-3 py-1 rounded-full text-gray-400 hover:text-gray-200 transition-colors';
+            
+            filterBtns.forEach(btn => {
+                if (btn.dataset.color === color) {
+                    btn.classList.add('border-gray-400');
+                    btn.classList.remove('border-transparent');
+                } else {
+                    btn.classList.remove('border-gray-400');
+                    btn.classList.add('border-transparent');
+                }
+            });
+
+            renderNotes();
+        }
+
+        function addNewNote(x = null, y = null) {
+            // 隨機選一個顏色
+            const colorKeys = Object.keys(colors);
+            const randomColor = colorKeys[Math.floor(Math.random() * colorKeys.length)];
+            
+            // 決定位置 (如果是雙擊，使用滑鼠位置；否則置中)
+            const boardRect = boardArea.getBoundingClientRect();
+            const spawnX = x !== null ? x : (boardRect.width / 2) - 140 + (Math.random() * 40 - 20);
+            const spawnY = y !== null ? y : (boardRect.height / 2) - 120 + (Math.random() * 40 - 20);
+
+            // 產生隨機傾斜角度 -3 到 3 度 (新增)
+            const randomRotation = (Math.random() * 6 - 3).toFixed(1);
+
+            const newNote = {
+                id: Date.now().toString(),
+                title: '',
+                content: '',
+                color: randomColor,
+                x: Math.max(0, spawnX),
+                y: Math.max(0, spawnY),
+                z: ++highestZ,
+                r: randomRotation, // 儲存角度
+                isPinned: false,
+                timestamp: Date.now()
+            };
+
+            notes.push(newNote);
+            saveNotes();
+            
+            // 如果目前有篩選且新便簽顏色不符，強制切換為「全部」以顯示新便簽
+            if (currentFilterColor !== 'all' && currentFilterColor !== randomColor) {
+                setFilter('all');
+            } else {
+                renderNotes();
+            }
+
+            // 讓新生成的便簽標題獲得焦點
+            setTimeout(() => {
+                const newNoteEl = document.querySelector(`.sticky-note[data-id="${newNote.id}"]`);
+                if (newNoteEl) {
+                    newNoteEl.querySelector('.title-input').focus();
+                }
+            }, 50);
+        }
+
+        // 雙擊看板空白處新增便簽
+        function handleBoardDoubleClick(e) {
+            if (e.target === boardArea && viewMode === 'canvas') {
+                const rect = boardArea.getBoundingClientRect();
+                const x = e.clientX - rect.left - 140; // 減去便簽一半寬度讓滑鼠在中間
+                const y = e.clientY - rect.top - 20;  // 減去頂部高度
+                addNewNote(x, y);
+            }
+        }
+
+        // 新增：匯出 JSON 備份功能
+        function exportNotes() {
+            if (notes.length === 0) return;
+            const dataStr = JSON.stringify(notes, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `創意便利貼備份_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 啟動應用程式
+        init();
+    </script>
+</body>
+</html>
